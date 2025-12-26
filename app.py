@@ -17,8 +17,8 @@ st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    Analyze retail shelf images to identify **empty shelves** and
-    generate **adaptive restocking alerts** using agent-based logic.
+    Upload a retail shelf image, select the number of shelf rows,
+    and visually identify **empty regions** that require restocking.
     """
 )
 
@@ -33,7 +33,7 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# Manual Shelf Control (KEY STABILITY FIX)
+# Manual Shelf Control (Stable & Realistic)
 # --------------------------------------------------
 shelves = st.slider(
     "🧮 Select number of shelf rows visible in image",
@@ -57,10 +57,9 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
         y2 = min((i + 1) * shelf_height, height)
 
         region = img_array[y1:y2, :, :]
-
         brightness = region.mean()
 
-        # Simple, explainable proxy for emptiness
+        # Simple, explainable proxy for shelf emptiness
         if brightness < 130:
             empty_shelves.append(i)
 
@@ -82,31 +81,48 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
     return empty_shelves, decision, priority
 
 # --------------------------------------------------
-# Draw Bounding Boxes (ONLY EMPTY SHELVES)
+# Draw Precise Bounding Boxes (Empty Regions Only)
 # --------------------------------------------------
 def draw_bounding_boxes(image, empty_shelves, shelves):
     draw = ImageDraw.Draw(image)
+    img_array = np.array(image)
+
     width, height = image.size
     shelf_height = height // shelves
 
-    x_start = int(0.2 * width)
-    x_end = int(0.8 * width)
-
     for shelf in empty_shelves:
-        y1 = shelf * shelf_height + 5
-        y2 = min((shelf + 1) * shelf_height - 5, height)
+        y1 = shelf * shelf_height
+        y2 = min((shelf + 1) * shelf_height, height)
 
-        draw.rectangle(
-            [(x_start, y1), (x_end, y2)],
-            outline="red",
-            width=4
-        )
+        shelf_region = img_array[y1:y2, :, :]
+        gray = np.mean(shelf_region, axis=2)
 
-        draw.text(
-            (x_start + 10, y1 + 10),
-            f"Shelf {shelf + 1} – Empty",
-            fill="red"
-        )
+        # Split shelf into vertical strips
+        num_strips = 6
+        strip_width = width // num_strips
+
+        for i in range(num_strips):
+            x1 = i * strip_width
+            x2 = min((i + 1) * strip_width, width)
+
+            strip = gray[:, x1:x2]
+
+            brightness = strip.mean()
+            texture = np.abs(np.diff(strip, axis=1)).mean()
+
+            # Empty region heuristic
+            if brightness > 160 and texture < 10:
+                draw.rectangle(
+                    [(x1, y1 + 5), (x2, y2 - 5)],
+                    outline="red",
+                    width=3
+                )
+
+                draw.text(
+                    (x1 + 5, y1 + 8),
+                    "Empty",
+                    fill="red"
+                )
 
     return image
 
@@ -123,7 +139,7 @@ if uploaded_image is not None:
     empty_shelves, decision, priority = agentic_inventory_analysis(image, shelves)
 
     st.write(f"**Total Shelves Analysed:** {shelves}")
-    st.write(f"**Empty Shelves Detected:** {len(empty_shelves)}")
+    st.write(f"**Shelves with Empty Regions:** {len(empty_shelves)}")
     st.write(f"**Decision:** {decision}")
     st.write(f"**Priority Level:** {priority}")
 
@@ -141,7 +157,7 @@ if uploaded_image is not None:
     st.subheader("🟥 Visual Restock Indicators")
     st.image(
         boxed_image,
-        caption="Only empty shelves are highlighted",
+        caption="Red boxes indicate actual empty regions within shelves",
         use_column_width=True
     )
 
@@ -149,5 +165,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Stable Shelf-Level Decision System | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Human-Guided Shelf Analysis | Streamlit Deployment"
 )

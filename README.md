@@ -47,3 +47,53 @@ This prevents false detection of ceilings, signage, or floor areas as shelves.
 ### 4️⃣ Emptiness Score Calculation
 For each shelf:
 
+Higher score → Shelf appears more empty.
+
+### 5️⃣ Comparative Anomaly Detection
+- Mean and standard deviation of all shelf scores are computed.
+- A shelf is marked empty **only if**:
+
+This ensures:
+- Zero empty shelves → zero detected
+- Partial emptiness → accurate detection
+- No forced or hallucinated alerts
+
+### 6️⃣ Restocking Decision
+Based on the ratio of empty shelves:
+- **LOW** → No restock required
+- **MEDIUM** → Restock can be planned
+- **HIGH** → Immediate restocking required
+
+---
+
+## 🤖 Why This Is an Agentic System
+
+- Follows a **Perception → Validation → Decision** loop
+- Does not generate outputs before confirming inputs
+- Uses contextual comparison instead of rigid rules
+- Adapts decisions based on observed shelf distribution
+- Allows human intervention at critical stages
+
+---
+
+## 🛠️ Technologies Used
+
+| Component | Technology |
+|--------|------------|
+| Programming Language | Python 3.10 |
+| Web Framework | Streamlit |
+| Image Processing | PIL (Pillow) |
+| Numerical Analysis | NumPy |
+| Deployment | Streamlit Cloud |
+
+---
+
+## 🚀 How to Run Locally
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+
+
+
+

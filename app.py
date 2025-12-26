@@ -17,10 +17,10 @@ st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    Step-by-step shelf analysis system that:
+    Step-wise, human-guided shelf analysis system that:
     1. Confirms shelf count  
-    2. Analyzes each shelf individually  
-    3. Generates restocking alerts based on findings
+    2. Analyses each shelf relative to others  
+    3. Generates restocking alerts only after validation
     """
 )
 
@@ -35,11 +35,12 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# STEP 1: User confirms shelf count
+# STEP 1: Shelf count confirmation
 # --------------------------------------------------
 if uploaded_image is not None:
+
     shelves = st.slider(
-        "🧮 STEP 1: Select the number of product shelves visible",
+        "🧮 STEP 1: Select number of product shelves visible",
         min_value=1,
         max_value=12,
         value=7
@@ -51,7 +52,7 @@ if uploaded_image is not None:
     st.image(image, caption="Uploaded Shelf Image", use_column_width=True)
 
     # --------------------------------------------------
-    # STEP 2: Shelf-wise analysis (ONLY after confirmation)
+    # STEP 2: Shelf-wise relative analysis
     # --------------------------------------------------
     if confirm:
 
@@ -62,32 +63,40 @@ if uploaded_image is not None:
         height = img_array.shape[0]
         shelf_height = height // shelves
 
-        empty_shelves = []
+        shelf_brightness = []
 
+        # Measure brightness for each shelf
         for i in range(shelves):
             y1 = i * shelf_height
             y2 = min((i + 1) * shelf_height, height)
             region = img_array[y1:y2, :, :]
+            shelf_brightness.append(region.mean())
 
-            brightness = region.mean()
+        # Global reference (prevents hallucination)
+        avg_brightness = np.mean(shelf_brightness)
+        tolerance = 0.12 * avg_brightness  # adaptive threshold
 
-            # Simple & consistent emptiness proxy
-            if brightness < 130:
+        empty_shelves = []
+
+        for i, value in enumerate(shelf_brightness):
+            if value < (avg_brightness - tolerance):
                 empty_shelves.append(i + 1)
 
-        # Show intermediate result (IMPORTANT)
-        st.write(f"**Shelves analyzed:** {shelves}")
+        # Transparent intermediate output
+        st.write(f"**Average shelf brightness:** {avg_brightness:.2f}")
+        st.write(f"**Adaptive tolerance:** ±{tolerance:.2f}")
+        st.write(f"**Shelves analysed:** {shelves}")
         st.write(f"**Empty shelves detected:** {len(empty_shelves)}")
 
         if empty_shelves:
-            st.write("📌 Empty shelf numbers:")
+            st.write("📌 Shelves detected as empty:")
             for shelf in empty_shelves:
                 st.markdown(f"- Shelf {shelf}")
         else:
             st.success("✅ No empty shelves detected.")
 
         # --------------------------------------------------
-        # STEP 3: Decision & Alert Generation
+        # STEP 3: Decision & Alert generation
         # --------------------------------------------------
         st.divider()
         st.subheader("🚨 STEP 3: Restocking Decision")
@@ -118,5 +127,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Stepwise, Human-in-the-loop Analysis | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Relative Shelf Analysis | Streamlit Deployment"
 )

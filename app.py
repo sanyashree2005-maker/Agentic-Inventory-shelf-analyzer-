@@ -11,14 +11,14 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Title & Description
+# Title
 # --------------------------------------------------
 st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    Upload a retail shelf image to analyze shelf-wise empty spaces and
-    generate adaptive inventory alerts using an agent-based decision system.
+    Upload a retail shelf image to detect **empty shelves**, 
+    visualize them clearly, and generate **adaptive restocking alerts**.
     """
 )
 
@@ -33,11 +33,24 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# Shelf Count Estimation (DEFINE FIRST)
+# Helper: Estimate Shelf Rows (Geometry)
 # --------------------------------------------------
 def estimate_shelf_count(image, min_shelf_height=90):
     height = image.size[1]
     return max(1, height // min_shelf_height)
+
+# --------------------------------------------------
+# Helper: Check if Region is Actually a Shelf
+# --------------------------------------------------
+def is_valid_shelf(region, edge_threshold=20):
+    """
+    Uses texture (edge density) to check if products exist.
+    Smooth regions (floor/ceiling) are ignored.
+    """
+    gray = np.mean(region, axis=2)
+    edges = np.abs(np.diff(gray, axis=1))
+    edge_density = edges.mean()
+    return edge_density > edge_threshold
 
 # --------------------------------------------------
 # Agentic Analysis Logic
@@ -46,18 +59,25 @@ def agentic_inventory_analysis(image: Image.Image):
     img_array = np.array(image)
     height, width, _ = img_array.shape
 
-    shelves = estimate_shelf_count(image)
-    shelf_height = height // shelves
+    estimated_shelves = estimate_shelf_count(image)
+    shelf_height = height // estimated_shelves
 
     empty_shelves = []
     shelf_status = []
+    valid_shelves = []
 
-    for i in range(shelves):
+    for i in range(estimated_shelves):
         y1 = i * shelf_height
         y2 = min((i + 1) * shelf_height, height)
 
-        shelf_region = img_array[y1:y2, :, :]
-        brightness = shelf_region.mean()
+        region = img_array[y1:y2, :, :]
+
+        # 🔑 NEW: Ignore non-shelf regions
+        if not is_valid_shelf(region):
+            continue
+
+        valid_shelves.append(i)
+        brightness = region.mean()
 
         if brightness < 130:
             empty_shelves.append(i)
@@ -65,30 +85,35 @@ def agentic_inventory_analysis(image: Image.Image):
         else:
             shelf_status.append("STOCKED")
 
-    empty_ratio = len(empty_shelves) / shelves
+    actual_shelves = len(valid_shelves)
+
+    if actual_shelves == 0:
+        return 0, [], [], "NO SHELVES DETECTED", "LOW"
+
+    empty_ratio = len(empty_shelves) / actual_shelves
 
     if empty_ratio == 0:
         decision = "NO RESTOCK REQUIRED"
         priority = "LOW"
-    elif empty_ratio <= 0.30:
+    elif empty_ratio <= 0.3:
         decision = "RESTOCK CAN BE PLANNED"
         priority = "LOW"
-    elif empty_ratio <= 0.60:
+    elif empty_ratio <= 0.6:
         decision = "RESTOCK ADVISED"
         priority = "MEDIUM"
     else:
         decision = "IMMEDIATE RESTOCK REQUIRED"
         priority = "HIGH"
 
-    return shelves, empty_shelves, shelf_status, decision, priority
+    return actual_shelves, empty_shelves, shelf_status, decision, priority
 
 # --------------------------------------------------
-# Draw Bounding Boxes (Only Empty Shelves)
+# Draw Bounding Boxes (Only Empty & Valid Shelves)
 # --------------------------------------------------
-def draw_bounding_boxes(image, empty_shelves, shelves):
+def draw_bounding_boxes(image, empty_shelves, estimated_shelves):
     draw = ImageDraw.Draw(image)
     width, height = image.size
-    shelf_height = height // shelves
+    shelf_height = height // estimated_shelves
 
     x_start = int(0.2 * width)
     x_end = int(0.8 * width)
@@ -117,40 +142,32 @@ def draw_bounding_boxes(image, empty_shelves, shelves):
 if uploaded_image is not None:
     image = Image.open(uploaded_image).convert("RGB")
 
-    st.image(
-        image,
-        caption="Uploaded Shelf Image",
-        use_column_width=True
-    )
+    st.image(image, caption="Uploaded Shelf Image", use_column_width=True)
 
     st.subheader("🔍 Agent Analysis")
 
     shelves, empty_shelves, shelf_status, decision, priority = agentic_inventory_analysis(image)
 
-    st.write(f"**Total Shelves Analysed:** {shelves}")
-    st.write(f"**Empty Shelves Detected:** {len(empty_shelves)}")
+    st.write(f"**Valid Shelves Detected:** {shelves}")
+    st.write(f"**Empty Shelves:** {len(empty_shelves)}")
     st.write(f"**Decision:** {decision}")
     st.write(f"**Priority Level:** {priority}")
 
     if priority == "HIGH":
-        st.error("🚨 High urgency: Multiple shelves are empty. Immediate restocking required.")
+        st.error("🚨 High urgency: Immediate restocking required.")
     elif priority == "MEDIUM":
-        st.warning("⚠️ Medium urgency: Some shelves need attention. Plan restocking soon.")
+        st.warning("⚠️ Medium urgency: Plan restocking soon.")
     else:
-        st.success("✅ Low urgency: Shelf levels are acceptable. Continue monitoring.")
+        st.success("✅ Low urgency: Stock levels acceptable.")
 
     st.divider()
 
-    st.subheader("📦 Shelf-wise Status")
-    for idx, status in enumerate(shelf_status):
-        st.write(f"Shelf {idx + 1}: {status}")
-
-    boxed_image = draw_bounding_boxes(image.copy(), empty_shelves, shelves)
+    boxed_image = draw_bounding_boxes(image.copy(), empty_shelves, estimate_shelf_count(image))
 
     st.subheader("🟥 Visual Restock Indicators")
     st.image(
         boxed_image,
-        caption="Only empty shelves are highlighted",
+        caption="Only real empty shelves are highlighted",
         use_column_width=True
     )
 
@@ -158,5 +175,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Flexible Shelf Localization | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Shelf-Aware & Explainable | Streamlit Deployment"
 )

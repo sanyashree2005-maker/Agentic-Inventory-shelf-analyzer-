@@ -11,14 +11,15 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Title & Description
+# Title
 # --------------------------------------------------
 st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    Upload a retail shelf image, select the number of shelf rows,
-    and identify **empty shelf regions** using lightweight agentic logic.
+    Upload a retail shelf image, select the number of shelves,
+    and identify **which shelves require restocking** using
+    clear visual indicators.
     """
 )
 
@@ -33,7 +34,7 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# Manual Shelf Control (Stable & Realistic)
+# Manual Shelf Control (Human-in-the-loop)
 # --------------------------------------------------
 shelves = st.slider(
     "🧮 Select number of shelf rows visible in image",
@@ -59,7 +60,7 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
         region = img_array[y1:y2, :, :]
         brightness = region.mean()
 
-        # Simple, explainable proxy for shelf emptiness
+        # Simple & explainable emptiness proxy
         if brightness < 130:
             empty_shelves.append(i)
 
@@ -81,54 +82,34 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
     return empty_shelves, decision, priority
 
 # --------------------------------------------------
-# Draw DOT MARKERS for Empty Regions (UX-Friendly)
+# Draw SIMPLE DOT INDICATORS (CLEAR & VISIBLE)
 # --------------------------------------------------
-def draw_empty_markers(image, empty_shelves, shelves):
+def draw_shelf_markers(image, empty_shelves, shelves):
     draw = ImageDraw.Draw(image)
-    img_array = np.array(image)
-
     width, height = image.size
     shelf_height = height // shelves
-    radius = 7  # size of marker
+
+    radius = 10  # dot size
 
     for shelf in empty_shelves:
-        y1 = shelf * shelf_height
-        y2 = min((shelf + 1) * shelf_height, height)
+        # Center of the shelf
+        cx = width // 2
+        cy = int((shelf + 0.5) * shelf_height)
 
-        shelf_region = img_array[y1:y2, :, :]
-        gray = np.mean(shelf_region, axis=2)
+        draw.ellipse(
+            [
+                (cx - radius, cy - radius),
+                (cx + radius, cy + radius)
+            ],
+            fill="red",
+            outline="red"
+        )
 
-        # Divide shelf into vertical segments
-        num_segments = 6
-        segment_width = width // num_segments
-
-        shelf_mean_brightness = gray.mean()
-        shelf_mean_texture = np.abs(np.diff(gray, axis=1)).mean()
-
-        for i in range(num_segments):
-            x1 = i * segment_width
-            x2 = min((i + 1) * segment_width, width)
-
-            segment = gray[:, x1:x2]
-            segment_brightness = segment.mean()
-            segment_texture = np.abs(np.diff(segment, axis=1)).mean()
-
-            # Relative emptiness rule (robust)
-            if (
-                segment_texture < 0.7 * shelf_mean_texture
-                and segment_brightness > shelf_mean_brightness
-            ):
-                cx = (x1 + x2) // 2
-                cy = (y1 + y2) // 2
-
-                draw.ellipse(
-                    [
-                        (cx - radius, cy - radius),
-                        (cx + radius, cy + radius)
-                    ],
-                    fill="red",
-                    outline="red"
-                )
+        draw.text(
+            (cx + radius + 5, cy - radius),
+            f"Shelf {shelf + 1}",
+            fill="red"
+        )
 
     return image
 
@@ -149,7 +130,7 @@ if uploaded_image is not None:
     empty_shelves, decision, priority = agentic_inventory_analysis(image, shelves)
 
     st.write(f"**Total Shelves Analysed:** {shelves}")
-    st.write(f"**Shelves with Empty Regions:** {len(empty_shelves)}")
+    st.write(f"**Shelves Needing Restock:** {len(empty_shelves)}")
     st.write(f"**Decision:** {decision}")
     st.write(f"**Priority Level:** {priority}")
 
@@ -162,12 +143,12 @@ if uploaded_image is not None:
 
     st.divider()
 
-    marked_image = draw_empty_markers(image.copy(), empty_shelves, shelves)
+    marked_image = draw_shelf_markers(image.copy(), empty_shelves, shelves)
 
     st.subheader("🔴 Visual Restock Indicators")
     st.image(
         marked_image,
-        caption="Red dots indicate empty shelf regions",
+        caption="Red dots mark shelves that require restocking",
         use_column_width=True
     )
 
@@ -175,5 +156,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Lightweight Visual Indicators | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Clear Shelf-Level Indicators | Streamlit Deployment"
 )

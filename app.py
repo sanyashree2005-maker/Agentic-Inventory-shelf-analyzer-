@@ -17,8 +17,10 @@ st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    Human-guided shelf analysis system that identifies  
-    **which shelf rows require restocking**.
+    Step-by-step shelf analysis system that:
+    1. Confirms shelf count  
+    2. Analyzes each shelf individually  
+    3. Generates restocking alerts based on findings
     """
 )
 
@@ -33,78 +35,88 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# Manual Shelf Control
+# STEP 1: User confirms shelf count
 # --------------------------------------------------
-shelves = st.slider(
-    "🧮 Select number of shelf rows (product shelves only)",
-    min_value=3,
-    max_value=12,
-    value=7
-)
+if uploaded_image is not None:
+    shelves = st.slider(
+        "🧮 STEP 1: Select the number of product shelves visible",
+        min_value=1,
+        max_value=12,
+        value=7
+    )
 
-# --------------------------------------------------
-# Agentic Shelf-Level Analysis
-# --------------------------------------------------
-def analyze_shelves(image, shelves):
-    img = np.array(image)
-    height = img.shape[0]
-    shelf_height = height // shelves
+    confirm = st.checkbox("✅ I confirm this shelf count")
 
-    shelves_needing_attention = []
-
-    for i in range(shelves):
-        y1 = i * shelf_height
-        y2 = min((i + 1) * shelf_height, height)
-        region = img[y1:y2, :, :]
-
-        brightness = region.mean()
-
-        # Simple, explainable rule
-        if brightness < 130:
-            shelves_needing_attention.append(i + 1)
-
-    ratio = len(shelves_needing_attention) / shelves
-
-    if ratio == 0:
-        decision = "NO RESTOCK REQUIRED"
-        priority = "LOW"
-    elif ratio <= 0.4:
-        decision = "RESTOCK CAN BE PLANNED"
-        priority = "MEDIUM"
-    else:
-        decision = "IMMEDIATE RESTOCK REQUIRED"
-        priority = "HIGH"
-
-    return shelves_needing_attention, decision, priority
-
-# --------------------------------------------------
-# Run Analysis
-# --------------------------------------------------
-if uploaded_image:
     image = Image.open(uploaded_image).convert("RGB")
-
     st.image(image, caption="Uploaded Shelf Image", use_column_width=True)
 
-    shelves_to_restock, decision, priority = analyze_shelves(image, shelves)
+    # --------------------------------------------------
+    # STEP 2: Shelf-wise analysis (ONLY after confirmation)
+    # --------------------------------------------------
+    if confirm:
 
-    st.subheader("🔍 Agent Analysis")
+        st.divider()
+        st.subheader("🔍 STEP 2: Shelf-wise Analysis")
 
-    st.write(f"**Decision:** {decision}")
-    st.write(f"**Priority:** {priority}")
+        img_array = np.array(image)
+        height = img_array.shape[0]
+        shelf_height = height // shelves
 
-    st.divider()
+        empty_shelves = []
 
-    st.subheader("📌 Shelves Requiring Attention")
+        for i in range(shelves):
+            y1 = i * shelf_height
+            y2 = min((i + 1) * shelf_height, height)
+            region = img_array[y1:y2, :, :]
 
-    if shelves_to_restock:
-        for shelf in shelves_to_restock:
-            st.markdown(f"🔴 **Shelf {shelf} – Needs Restocking**")
-    else:
-        st.success("✅ All shelves appear sufficiently stocked.")
+            brightness = region.mean()
+
+            # Simple & consistent emptiness proxy
+            if brightness < 130:
+                empty_shelves.append(i + 1)
+
+        # Show intermediate result (IMPORTANT)
+        st.write(f"**Shelves analyzed:** {shelves}")
+        st.write(f"**Empty shelves detected:** {len(empty_shelves)}")
+
+        if empty_shelves:
+            st.write("📌 Empty shelf numbers:")
+            for shelf in empty_shelves:
+                st.markdown(f"- Shelf {shelf}")
+        else:
+            st.success("✅ No empty shelves detected.")
+
+        # --------------------------------------------------
+        # STEP 3: Decision & Alert Generation
+        # --------------------------------------------------
+        st.divider()
+        st.subheader("🚨 STEP 3: Restocking Decision")
+
+        empty_ratio = len(empty_shelves) / shelves if shelves > 0 else 0
+
+        if empty_ratio == 0:
+            decision = "NO RESTOCK REQUIRED"
+            priority = "LOW"
+        elif empty_ratio <= 0.4:
+            decision = "RESTOCK CAN BE PLANNED"
+            priority = "MEDIUM"
+        else:
+            decision = "IMMEDIATE RESTOCK REQUIRED"
+            priority = "HIGH"
+
+        st.write(f"**Decision:** {decision}")
+        st.write(f"**Priority Level:** {priority}")
+
+        if priority == "HIGH":
+            st.error("🚨 Immediate restocking required.")
+        elif priority == "MEDIUM":
+            st.warning("⚠️ Restocking recommended soon.")
+        else:
+            st.success("✅ Stock levels acceptable.")
 
 # --------------------------------------------------
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Shelf-Level Decision System | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Stepwise, Human-in-the-loop Analysis | Streamlit Deployment"
 )

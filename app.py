@@ -11,14 +11,14 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Title
+# Title & Description
 # --------------------------------------------------
 st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
     Upload a retail shelf image, select the number of shelf rows,
-    and visually identify **empty regions** that require restocking.
+    and identify **empty shelf regions** using lightweight agentic logic.
     """
 )
 
@@ -81,14 +81,15 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
     return empty_shelves, decision, priority
 
 # --------------------------------------------------
-# Draw Precise Bounding Boxes (Empty Regions Only)
+# Draw DOT MARKERS for Empty Regions (UX-Friendly)
 # --------------------------------------------------
-def draw_bounding_boxes(image, empty_shelves, shelves):
+def draw_empty_markers(image, empty_shelves, shelves):
     draw = ImageDraw.Draw(image)
     img_array = np.array(image)
 
     width, height = image.size
     shelf_height = height // shelves
+    radius = 7  # size of marker
 
     for shelf in empty_shelves:
         y1 = shelf * shelf_height
@@ -97,31 +98,36 @@ def draw_bounding_boxes(image, empty_shelves, shelves):
         shelf_region = img_array[y1:y2, :, :]
         gray = np.mean(shelf_region, axis=2)
 
-        # Split shelf into vertical strips
-        num_strips = 6
-        strip_width = width // num_strips
+        # Divide shelf into vertical segments
+        num_segments = 6
+        segment_width = width // num_segments
 
-        for i in range(num_strips):
-            x1 = i * strip_width
-            x2 = min((i + 1) * strip_width, width)
+        shelf_mean_brightness = gray.mean()
+        shelf_mean_texture = np.abs(np.diff(gray, axis=1)).mean()
 
-            strip = gray[:, x1:x2]
+        for i in range(num_segments):
+            x1 = i * segment_width
+            x2 = min((i + 1) * segment_width, width)
 
-            brightness = strip.mean()
-            texture = np.abs(np.diff(strip, axis=1)).mean()
+            segment = gray[:, x1:x2]
+            segment_brightness = segment.mean()
+            segment_texture = np.abs(np.diff(segment, axis=1)).mean()
 
-            # Empty region heuristic
-            if brightness > 160 and texture < 10:
-                draw.rectangle(
-                    [(x1, y1 + 5), (x2, y2 - 5)],
-                    outline="red",
-                    width=3
-                )
+            # Relative emptiness rule (robust)
+            if (
+                segment_texture < 0.7 * shelf_mean_texture
+                and segment_brightness > shelf_mean_brightness
+            ):
+                cx = (x1 + x2) // 2
+                cy = (y1 + y2) // 2
 
-                draw.text(
-                    (x1 + 5, y1 + 8),
-                    "Empty",
-                    fill="red"
+                draw.ellipse(
+                    [
+                        (cx - radius, cy - radius),
+                        (cx + radius, cy + radius)
+                    ],
+                    fill="red",
+                    outline="red"
                 )
 
     return image
@@ -132,7 +138,11 @@ def draw_bounding_boxes(image, empty_shelves, shelves):
 if uploaded_image is not None:
     image = Image.open(uploaded_image).convert("RGB")
 
-    st.image(image, caption="Uploaded Shelf Image", use_column_width=True)
+    st.image(
+        image,
+        caption="Uploaded Shelf Image",
+        use_column_width=True
+    )
 
     st.subheader("🔍 Agent Analysis")
 
@@ -152,12 +162,12 @@ if uploaded_image is not None:
 
     st.divider()
 
-    boxed_image = draw_bounding_boxes(image.copy(), empty_shelves, shelves)
+    marked_image = draw_empty_markers(image.copy(), empty_shelves, shelves)
 
-    st.subheader("🟥 Visual Restock Indicators")
+    st.subheader("🔴 Visual Restock Indicators")
     st.image(
-        boxed_image,
-        caption="Red boxes indicate actual empty regions within shelves",
+        marked_image,
+        caption="Red dots indicate empty shelf regions",
         use_column_width=True
     )
 
@@ -165,5 +175,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Human-Guided Shelf Analysis | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Lightweight Visual Indicators | Streamlit Deployment"
 )

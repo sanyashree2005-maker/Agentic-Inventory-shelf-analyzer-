@@ -2,91 +2,136 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 
+# --------------------------------------------------
+# Page Configuration
+# --------------------------------------------------
 st.set_page_config(
     page_title="Agentic Inventory Alert Bot",
     layout="centered"
 )
 
+# --------------------------------------------------
+# Title
+# --------------------------------------------------
 st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    **Decision-support shelf analysis system**
+    **Step-wise shelf analysis system**
 
-    The agent does **not guess emptiness**.
-    It computes **relative shelf scores** and lets the user interpret them.
+    1️⃣ Confirm number of shelves  
+    2️⃣ Analyse shelves comparatively  
+    3️⃣ Detect empty shelves  
+    4️⃣ Generate restocking alert
     """
 )
 
 st.divider()
 
+# --------------------------------------------------
+# Image Upload
+# --------------------------------------------------
 uploaded_image = st.file_uploader(
     "📤 Upload Shelf Image",
     type=["jpg", "jpeg", "png"]
 )
 
+# --------------------------------------------------
+# STEP 1 — Shelf count confirmation
+# --------------------------------------------------
 if uploaded_image is not None:
 
     shelves = st.slider(
-        "🧮 STEP 1: Select number of product shelves",
+        "🧮 STEP 1: Select number of product shelves visible",
         min_value=1,
         max_value=12,
         value=7
     )
 
+    confirm = st.checkbox("✅ I confirm this shelf count")
+
     image = Image.open(uploaded_image).convert("RGB")
     st.image(image, caption="Uploaded Shelf Image", use_column_width=True)
 
-    st.divider()
-    st.subheader("🔍 STEP 2: Shelf-wise Scoring (Transparent)")
+    # --------------------------------------------------
+    # STEP 2 — Shelf-wise comparative analysis
+    # --------------------------------------------------
+    if confirm:
 
-    img = np.array(image)
-    height = img.shape[0]
-    shelf_height = height // shelves
+        st.divider()
+        st.subheader("🔍 STEP 2: Shelf-wise Analysis")
 
-    shelf_scores = []
+        img = np.array(image)
+        height = img.shape[0]
+        shelf_height = height // shelves
 
-    for i in range(shelves):
-        y1 = i * shelf_height
-        y2 = min((i + 1) * shelf_height, height)
-        region = img[y1:y2, :, :]
+        emptiness_scores = []
 
-        # Emptiness score = inverse brightness
-        score = 255 - region.mean()
-        shelf_scores.append(score)
+        # Compute emptiness score for each shelf
+        for i in range(shelves):
+            y1 = i * shelf_height
+            y2 = min((i + 1) * shelf_height, height)
+            region = img[y1:y2, :, :]
 
-    avg_score = np.mean(shelf_scores)
+            # Emptiness score (higher = more empty)
+            score = 255 - region.mean()
+            emptiness_scores.append(score)
 
-    # Display scores clearly
-    for i, score in enumerate(shelf_scores):
-        st.progress(min(score / (avg_score * 2), 1.0))
-        st.write(f"Shelf {i+1} — Emptiness Score: {score:.2f}")
+        mean_score = np.mean(emptiness_scores)
+        std_score = np.std(emptiness_scores)
 
-    st.divider()
-    st.subheader("🧠 STEP 3: Human-guided Decision")
+        empty_shelves = []
+        empty_levels = {}
 
-    suggested = [
-        i + 1 for i, s in enumerate(shelf_scores)
-        if s > avg_score * 1.2
-    ]
+        for i, score in enumerate(emptiness_scores):
+            if score > mean_score + std_score:
+                empty_shelves.append(i + 1)
+                empty_levels[i + 1] = score
 
-    if suggested:
-        st.info(
-            f"📌 Shelves with noticeably higher emptiness score: {suggested}"
-        )
-    else:
-        st.success("✅ All shelves appear similarly stocked.")
+        # Transparent output
+        st.write(f"**Shelves analysed:** {shelves}")
+        st.write(f"**Empty shelves detected:** {len(empty_shelves)}")
 
-    st.markdown(
-        """
-        **Why this works:**
-        - The agent computes *relative evidence*
-        - The human confirms interpretation
-        - No false alarms
-        - No hallucinated counts
-        """
-    )
+        if empty_shelves:
+            st.write("📌 Empty shelves & empty level score:")
+            for shelf, level in empty_levels.items():
+                st.markdown(
+                    f"- **Shelf {shelf}** → Empty Level Score: `{level:.2f}`"
+                )
+        else:
+            st.success("✅ No empty shelves detected.")
 
+        # --------------------------------------------------
+        # STEP 3 — Restocking decision
+        # --------------------------------------------------
+        st.divider()
+        st.subheader("🚨 STEP 3: Restocking Decision")
+
+        empty_ratio = len(empty_shelves) / shelves
+
+        if empty_ratio == 0:
+            decision = "NO RESTOCK REQUIRED"
+            priority = "LOW"
+        elif empty_ratio <= 0.4:
+            decision = "RESTOCK CAN BE PLANNED"
+            priority = "MEDIUM"
+        else:
+            decision = "IMMEDIATE RESTOCK REQUIRED"
+            priority = "HIGH"
+
+        st.write(f"**Decision:** {decision}")
+        st.write(f"**Priority Level:** {priority}")
+
+        if priority == "HIGH":
+            st.error("🚨 Immediate restocking required.")
+        elif priority == "MEDIUM":
+            st.warning("⚠️ Restocking recommended soon.")
+        else:
+            st.success("✅ Stock levels acceptable.")
+
+# --------------------------------------------------
+# Footer
+# --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Decision-Support System | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Comparative Shelf Analysis | Streamlit Deployment"
 )

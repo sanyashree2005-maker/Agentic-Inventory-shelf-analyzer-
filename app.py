@@ -17,8 +17,8 @@ st.title("🛒 Agentic Inventory Alert Bot")
 
 st.markdown(
     """
-    Upload a retail shelf image to detect **empty shelves**, 
-    visualize them clearly, and generate **adaptive restocking alerts**.
+    Analyze retail shelf images to identify **empty shelves** and
+    generate **adaptive restocking alerts** using agent-based logic.
     """
 )
 
@@ -33,64 +33,38 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# Helper: Estimate Shelf Rows (Geometry)
+# Manual Shelf Control (KEY STABILITY FIX)
 # --------------------------------------------------
-def estimate_shelf_count(image, min_shelf_height=90):
-    height = image.size[1]
-    return max(1, height // min_shelf_height)
-
-# --------------------------------------------------
-# Helper: Check if Region is Actually a Shelf
-# --------------------------------------------------
-def is_valid_shelf(region, edge_threshold=20):
-    """
-    Uses texture (edge density) to check if products exist.
-    Smooth regions (floor/ceiling) are ignored.
-    """
-    gray = np.mean(region, axis=2)
-    edges = np.abs(np.diff(gray, axis=1))
-    edge_density = edges.mean()
-    return edge_density > edge_threshold
+shelves = st.slider(
+    "🧮 Select number of shelf rows visible in image",
+    min_value=3,
+    max_value=12,
+    value=7
+)
 
 # --------------------------------------------------
 # Agentic Analysis Logic
 # --------------------------------------------------
-def agentic_inventory_analysis(image: Image.Image):
+def agentic_inventory_analysis(image: Image.Image, shelves: int):
     img_array = np.array(image)
     height, width, _ = img_array.shape
-
-    estimated_shelves = estimate_shelf_count(image)
-    shelf_height = height // estimated_shelves
+    shelf_height = height // shelves
 
     empty_shelves = []
-    shelf_status = []
-    valid_shelves = []
 
-    for i in range(estimated_shelves):
+    for i in range(shelves):
         y1 = i * shelf_height
         y2 = min((i + 1) * shelf_height, height)
 
         region = img_array[y1:y2, :, :]
 
-        # 🔑 NEW: Ignore non-shelf regions
-        if not is_valid_shelf(region):
-            continue
-
-        valid_shelves.append(i)
         brightness = region.mean()
 
+        # Simple, explainable proxy for emptiness
         if brightness < 130:
             empty_shelves.append(i)
-            shelf_status.append("EMPTY")
-        else:
-            shelf_status.append("STOCKED")
 
-    actual_shelves = len(valid_shelves)
-
-    if actual_shelves == 0:
-        return 0, [], [], "NO SHELVES DETECTED", "LOW"
-
-    empty_ratio = len(empty_shelves) / actual_shelves
+    empty_ratio = len(empty_shelves) / shelves
 
     if empty_ratio == 0:
         decision = "NO RESTOCK REQUIRED"
@@ -105,22 +79,22 @@ def agentic_inventory_analysis(image: Image.Image):
         decision = "IMMEDIATE RESTOCK REQUIRED"
         priority = "HIGH"
 
-    return actual_shelves, empty_shelves, shelf_status, decision, priority
+    return empty_shelves, decision, priority
 
 # --------------------------------------------------
-# Draw Bounding Boxes (Only Empty & Valid Shelves)
+# Draw Bounding Boxes (ONLY EMPTY SHELVES)
 # --------------------------------------------------
-def draw_bounding_boxes(image, empty_shelves, estimated_shelves):
+def draw_bounding_boxes(image, empty_shelves, shelves):
     draw = ImageDraw.Draw(image)
     width, height = image.size
-    shelf_height = height // estimated_shelves
+    shelf_height = height // shelves
 
     x_start = int(0.2 * width)
     x_end = int(0.8 * width)
 
     for shelf in empty_shelves:
-        y1 = shelf * shelf_height + 6
-        y2 = min((shelf + 1) * shelf_height - 6, height)
+        y1 = shelf * shelf_height + 5
+        y2 = min((shelf + 1) * shelf_height - 5, height)
 
         draw.rectangle(
             [(x_start, y1), (x_end, y2)],
@@ -146,10 +120,10 @@ if uploaded_image is not None:
 
     st.subheader("🔍 Agent Analysis")
 
-    shelves, empty_shelves, shelf_status, decision, priority = agentic_inventory_analysis(image)
+    empty_shelves, decision, priority = agentic_inventory_analysis(image, shelves)
 
-    st.write(f"**Valid Shelves Detected:** {shelves}")
-    st.write(f"**Empty Shelves:** {len(empty_shelves)}")
+    st.write(f"**Total Shelves Analysed:** {shelves}")
+    st.write(f"**Empty Shelves Detected:** {len(empty_shelves)}")
     st.write(f"**Decision:** {decision}")
     st.write(f"**Priority Level:** {priority}")
 
@@ -162,12 +136,12 @@ if uploaded_image is not None:
 
     st.divider()
 
-    boxed_image = draw_bounding_boxes(image.copy(), empty_shelves, estimate_shelf_count(image))
+    boxed_image = draw_bounding_boxes(image.copy(), empty_shelves, shelves)
 
     st.subheader("🟥 Visual Restock Indicators")
     st.image(
         boxed_image,
-        caption="Only real empty shelves are highlighted",
+        caption="Only empty shelves are highlighted",
         use_column_width=True
     )
 
@@ -175,5 +149,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Shelf-Aware & Explainable | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Stable Shelf-Level Decision System | Streamlit Deployment"
 )

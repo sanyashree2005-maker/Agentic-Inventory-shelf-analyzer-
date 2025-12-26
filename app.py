@@ -33,18 +33,14 @@ uploaded_image = st.file_uploader(
 )
 
 # --------------------------------------------------
-# Shelf Count Estimation (Dynamic)
+# Shelf Count Estimation (DEFINE FIRST)
 # --------------------------------------------------
 def estimate_shelf_count(image, min_shelf_height=90):
-    """
-    Estimate number of shelf rows using image height.
-    """
     height = image.size[1]
-    shelves = max(1, height // min_shelf_height)
-    return shelves
+    return max(1, height // min_shelf_height)
 
 # --------------------------------------------------
-# Agentic Analysis Logic (Flexible & Adaptive)
+# Agentic Analysis Logic
 # --------------------------------------------------
 def agentic_inventory_analysis(image: Image.Image):
     img_array = np.array(image)
@@ -69,9 +65,6 @@ def agentic_inventory_analysis(image: Image.Image):
         else:
             shelf_status.append("STOCKED")
 
-    # -------------------------------
-    # Adaptive urgency decision
-    # -------------------------------
     empty_ratio = len(empty_shelves) / shelves
 
     if empty_ratio == 0:
@@ -90,14 +83,13 @@ def agentic_inventory_analysis(image: Image.Image):
     return shelves, empty_shelves, shelf_status, decision, priority
 
 # --------------------------------------------------
-# Draw Compact Bounding Boxes (Only Empty Shelves)
+# Draw Bounding Boxes (Only Empty Shelves)
 # --------------------------------------------------
 def draw_bounding_boxes(image, empty_shelves, shelves):
     draw = ImageDraw.Draw(image)
     width, height = image.size
     shelf_height = height // shelves
 
-    # Narrow horizontal bounds for clarity
     x_start = int(0.2 * width)
     x_end = int(0.8 * width)
 
@@ -133,4 +125,38 @@ if uploaded_image is not None:
 
     st.subheader("🔍 Agent Analysis")
 
-    sh
+    shelves, empty_shelves, shelf_status, decision, priority = agentic_inventory_analysis(image)
+
+    st.write(f"**Total Shelves Analysed:** {shelves}")
+    st.write(f"**Empty Shelves Detected:** {len(empty_shelves)}")
+    st.write(f"**Decision:** {decision}")
+    st.write(f"**Priority Level:** {priority}")
+
+    if priority == "HIGH":
+        st.error("🚨 High urgency: Multiple shelves are empty. Immediate restocking required.")
+    elif priority == "MEDIUM":
+        st.warning("⚠️ Medium urgency: Some shelves need attention. Plan restocking soon.")
+    else:
+        st.success("✅ Low urgency: Shelf levels are acceptable. Continue monitoring.")
+
+    st.divider()
+
+    st.subheader("📦 Shelf-wise Status")
+    for idx, status in enumerate(shelf_status):
+        st.write(f"Shelf {idx + 1}: {status}")
+
+    boxed_image = draw_bounding_boxes(image.copy(), empty_shelves, shelves)
+
+    st.subheader("🟥 Visual Restock Indicators")
+    st.image(
+        boxed_image,
+        caption="Only empty shelves are highlighted",
+        use_column_width=True
+    )
+
+# --------------------------------------------------
+# Footer
+# --------------------------------------------------
+st.caption(
+    "Agentic Inventory Alert Bot | Flexible Shelf Localization | Streamlit Deployment"
+)

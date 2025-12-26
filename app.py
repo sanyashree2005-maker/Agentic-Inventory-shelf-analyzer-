@@ -18,8 +18,8 @@ st.title("🛒 Agentic Inventory Alert Bot")
 st.markdown(
     """
     Upload a retail shelf image, select the number of shelves,
-    and identify **which shelves require restocking** using
-    clear visual indicators.
+    and clearly identify **which shelves require restocking**
+    using minimal visual indicators.
     """
 )
 
@@ -37,11 +37,19 @@ uploaded_image = st.file_uploader(
 # Manual Shelf Control (Human-in-the-loop)
 # --------------------------------------------------
 shelves = st.slider(
-    "🧮 Select number of shelf rows visible in image",
+    "🧮 Select number of shelf rows (product shelves only)",
     min_value=3,
     max_value=12,
     value=7
 )
+
+# --------------------------------------------------
+# Helper: Check if band contains products (TEXTURE CHECK)
+# --------------------------------------------------
+def is_product_shelf(region, texture_threshold=12):
+    gray = np.mean(region, axis=2)
+    texture = np.abs(np.diff(gray, axis=1)).mean()
+    return texture > texture_threshold
 
 # --------------------------------------------------
 # Agentic Analysis Logic
@@ -53,18 +61,31 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
 
     empty_shelves = []
 
+    # Ignore extreme top & bottom (ceiling / floor)
+    top_ignore = int(0.1 * height)
+    bottom_ignore = int(0.9 * height)
+
     for i in range(shelves):
         y1 = i * shelf_height
         y2 = min((i + 1) * shelf_height, height)
 
+        # Skip non-product zones
+        if y2 < top_ignore or y1 > bottom_ignore:
+            continue
+
         region = img_array[y1:y2, :, :]
+
+        # 🔑 NEW: validate that this is actually a shelf
+        if not is_product_shelf(region):
+            continue
+
         brightness = region.mean()
 
-        # Simple & explainable emptiness proxy
+        # Emptiness proxy (simple & explainable)
         if brightness < 130:
             empty_shelves.append(i)
 
-    empty_ratio = len(empty_shelves) / shelves
+    empty_ratio = len(empty_shelves) / shelves if shelves > 0 else 0
 
     if empty_ratio == 0:
         decision = "NO RESTOCK REQUIRED"
@@ -82,31 +103,26 @@ def agentic_inventory_analysis(image: Image.Image, shelves: int):
     return empty_shelves, decision, priority
 
 # --------------------------------------------------
-# Draw SIMPLE DOT INDICATORS (CLEAR & VISIBLE)
+# Draw ONE DOT PER EMPTY SHELF (CLEAN & CLEAR)
 # --------------------------------------------------
 def draw_shelf_markers(image, empty_shelves, shelves):
     draw = ImageDraw.Draw(image)
     width, height = image.size
     shelf_height = height // shelves
-
-    radius = 10  # dot size
+    radius = 9
 
     for shelf in empty_shelves:
-        # Center of the shelf
         cx = width // 2
         cy = int((shelf + 0.5) * shelf_height)
 
         draw.ellipse(
-            [
-                (cx - radius, cy - radius),
-                (cx + radius, cy + radius)
-            ],
+            [(cx - radius, cy - radius), (cx + radius, cy + radius)],
             fill="red",
             outline="red"
         )
 
         draw.text(
-            (cx + radius + 5, cy - radius),
+            (cx + radius + 6, cy - radius),
             f"Shelf {shelf + 1}",
             fill="red"
         )
@@ -148,7 +164,7 @@ if uploaded_image is not None:
     st.subheader("🔴 Visual Restock Indicators")
     st.image(
         marked_image,
-        caption="Red dots mark shelves that require restocking",
+        caption="Red dots mark ONLY valid shelves that need restocking",
         use_column_width=True
     )
 
@@ -156,5 +172,5 @@ if uploaded_image is not None:
 # Footer
 # --------------------------------------------------
 st.caption(
-    "Agentic Inventory Alert Bot | Clear Shelf-Level Indicators | Streamlit Deployment"
+    "Agentic Inventory Alert Bot | Shelf-Validated Indicators | Streamlit Deployment"
 )
